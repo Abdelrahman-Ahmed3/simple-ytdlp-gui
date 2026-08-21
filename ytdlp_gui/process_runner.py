@@ -10,6 +10,9 @@ from .models import ProgressUpdate
 from .progress import parse_output_path, parse_progress_line
 
 
+YOUTUBE_403_CLIENT = "youtube:player_client=web_embedded"
+
+
 class ProcessRunner(QObject):
     started = Signal(str)
     log_line = Signal(str)
@@ -102,6 +105,9 @@ class ProcessRunner(QObject):
             self.completed.emit(self._output_path, details)
         elif is_http_403(details) and not self._retried_after_403:
             retry_args = list(self._args)
+            is_youtube = any("youtube.com/" in value or "youtu.be/" in value for value in retry_args)
+            if is_youtube and YOUTUBE_403_CLIENT not in retry_args:
+                retry_args[0:0] = ["--extractor-args", YOUTUBE_403_CLIENT]
             if "--no-continue" not in retry_args:
                 retry_args.insert(0, "--no-continue")
             if "--force-ipv4" not in retry_args:
@@ -110,7 +116,11 @@ class ProcessRunner(QObject):
                 self.failed.emit(exit_code, details)
                 return
             self._retried_after_403 = True
-            retry_message = "The server returned HTTP 403; retrying once over IPv4 from the beginning…"
+            retry_message = (
+                "YouTube returned HTTP 403; retrying from the beginning through its embedded client…"
+                if is_youtube
+                else "The server returned HTTP 403; retrying once over IPv4 from the beginning…"
+            )
             self._log.append(retry_message)
             self.log_line.emit(retry_message)
             QTimer.singleShot(0, lambda: self._launch(self._program, retry_args))

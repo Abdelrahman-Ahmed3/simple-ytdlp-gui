@@ -54,7 +54,7 @@ Install development requirements, then run from the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-The single-file application will be created as `dist\yt-dlp-gui-v0.1.5.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
+The single-file application will be created as `dist\yt-dlp-gui-v0.1.6.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
 
 ## Selection behavior
 
