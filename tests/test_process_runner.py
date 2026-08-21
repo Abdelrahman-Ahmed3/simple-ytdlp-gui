@@ -18,19 +18,24 @@ def test_http_403_is_retried_once_over_ipv4() -> None:
     assert launches == [
         (
             "yt-dlp",
-            ["--force-ipv4", "--no-playlist", "https://example.com/video"],
+            [
+                "--force-ipv4",
+                "--no-continue",
+                "--no-playlist",
+                "https://example.com/video",
+            ],
         )
     ]
-    assert runner._retried_with_ipv4
+    assert runner._retried_after_403
 
 
-def test_http_403_is_not_retried_when_ipv4_was_already_forced() -> None:
+def test_http_403_is_not_retried_when_all_recovery_options_were_already_used() -> None:
     QCoreApplication.instance() or QCoreApplication([])
     runner = ProcessRunner()
     failures: list[tuple[int, str]] = []
     runner.failed.connect(lambda code, details: failures.append((code, details)))
     runner._program = "yt-dlp"
-    runner._args = ["--force-ipv4", "https://example.com/video"]
+    runner._args = ["--force-ipv4", "--no-continue", "https://example.com/video"]
     runner._log = ["ERROR: HTTP Error 403: Forbidden"]
 
     runner._finished(1, QProcess.NormalExit)

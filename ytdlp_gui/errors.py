@@ -12,7 +12,7 @@ def friendly_error(output: str, exit_code: int) -> str:
         (
             ("http error 403", "403: forbidden"),
             "The site rejected the media request. Update yt-dlp, then try again; "
-            "if it still fails, disable any VPN or try another network.",
+            "if it still fails, switch to another VPN server or location.",
         ),
         (("requested format is not available", "format is not available"), "The selected quality, codec, or container combination is unavailable for this video."),
         (("ffmpeg not found", "ffprobe and ffmpeg not found", "ffmpeg is not installed"), "FFmpeg is required for this operation but could not be found. Select it in Settings."),

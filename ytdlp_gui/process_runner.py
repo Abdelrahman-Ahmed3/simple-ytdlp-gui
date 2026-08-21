@@ -31,7 +31,7 @@ class ProcessRunner(QObject):
         self._cancelling = False
         self._program = ""
         self._args: list[str] = []
-        self._retried_with_ipv4 = False
+        self._retried_after_403 = False
 
     @property
     def running(self) -> bool:
@@ -46,7 +46,7 @@ class ProcessRunner(QObject):
         self._cancelling = False
         self._program = program
         self._args = list(args)
-        self._retried_with_ipv4 = False
+        self._retried_after_403 = False
         self._launch(program, args)
 
     def _launch(self, program: str, args: list[str]) -> None:
@@ -100,12 +100,19 @@ class ProcessRunner(QObject):
         elif exit_code == 0:
             self.progress.emit(ProgressUpdate(percent=100.0, operation="Finished"))
             self.completed.emit(self._output_path, details)
-        elif is_http_403(details) and not self._retried_with_ipv4 and "--force-ipv4" not in self._args:
-            self._retried_with_ipv4 = True
-            retry_message = "The server returned HTTP 403; retrying once over IPv4…"
+        elif is_http_403(details) and not self._retried_after_403:
+            retry_args = list(self._args)
+            if "--no-continue" not in retry_args:
+                retry_args.insert(0, "--no-continue")
+            if "--force-ipv4" not in retry_args:
+                retry_args.insert(0, "--force-ipv4")
+            if retry_args == self._args:
+                self.failed.emit(exit_code, details)
+                return
+            self._retried_after_403 = True
+            retry_message = "The server returned HTTP 403; retrying once over IPv4 from the beginning…"
             self._log.append(retry_message)
             self.log_line.emit(retry_message)
-            retry_args = ["--force-ipv4", *self._args]
             QTimer.singleShot(0, lambda: self._launch(self._program, retry_args))
         else:
             self.failed.emit(exit_code, details)

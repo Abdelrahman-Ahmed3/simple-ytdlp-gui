@@ -26,3 +26,4 @@ def test_http_403_is_detected_and_explained() -> None:
     assert is_http_403(output)
     message = friendly_error(output, 1)
     assert "Update yt-dlp" in message
+    assert "VPN server" in message
