@@ -5,6 +5,7 @@ import os
 from PySide6.QtCore import QObject, QProcess, QTimer, Signal
 
 from .command_builder import display_command
+from .errors import is_http_403
 from .models import ProgressUpdate
 from .progress import parse_output_path, parse_progress_line
 
@@ -28,6 +29,9 @@ class ProcessRunner(QObject):
         self._log: list[str] = []
         self._output_path = ""
         self._cancelling = False
+        self._program = ""
+        self._args: list[str] = []
+        self._retried_with_ipv4 = False
 
     @property
     def running(self) -> bool:
@@ -40,6 +44,12 @@ class ProcessRunner(QObject):
         self._log.clear()
         self._output_path = ""
         self._cancelling = False
+        self._program = program
+        self._args = list(args)
+        self._retried_with_ipv4 = False
+        self._launch(program, args)
+
+    def _launch(self, program: str, args: list[str]) -> None:
         command = display_command(program, args)
         self.started.emit(command)
         self.process.start(program, args)
@@ -83,12 +93,20 @@ class ProcessRunner(QObject):
     def _finished(self, exit_code: int, _status: QProcess.ExitStatus) -> None:
         if self._buffer.strip():
             self._handle_line(self._buffer.strip())
+        self._buffer = ""
         details = "\n".join(self._log)
         if self._cancelling:
             self.cancelled.emit()
         elif exit_code == 0:
             self.progress.emit(ProgressUpdate(percent=100.0, operation="Finished"))
             self.completed.emit(self._output_path, details)
+        elif is_http_403(details) and not self._retried_with_ipv4 and "--force-ipv4" not in self._args:
+            self._retried_with_ipv4 = True
+            retry_message = "The server returned HTTP 403; retrying once over IPv4…"
+            self._log.append(retry_message)
+            self.log_line.emit(retry_message)
+            retry_args = ["--force-ipv4", *self._args]
+            QTimer.singleShot(0, lambda: self._launch(self._program, retry_args))
         else:
             self.failed.emit(exit_code, details)
 
