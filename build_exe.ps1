@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $buildDirectory = Join-Path $PSScriptRoot "build"
-$specFile = Join-Path $PSScriptRoot "yt-dlp-gui-v0.1.6.spec"
+$specFile = Join-Path $PSScriptRoot "yt-dlp-gui-v0.1.7.spec"
 
 Push-Location $PSScriptRoot
 try {
@@ -9,14 +9,14 @@ try {
         --clean `
         --onefile `
         --windowed `
-        --name "yt-dlp-gui-v0.1.6" `
+        --name "yt-dlp-gui-v0.1.7" `
         "run_gui.py"
 
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstaller failed with exit code $LASTEXITCODE"
     }
 
-    Write-Host "Built: $PSScriptRoot\dist\yt-dlp-gui-v0.1.6.exe"
+    Write-Host "Built: $PSScriptRoot\dist\yt-dlp-gui-v0.1.7.exe"
 }
 finally {
     Pop-Location

@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 
 from ytdlp_gui.command_builder import PROGRESS_PREFIX, build_download_args
 from ytdlp_gui.models import Container, DownloadMode, DownloadOptions, VideoCodec
@@ -70,3 +71,34 @@ def test_progress_template_is_machine_readable_and_url_is_last() -> None:
     assert "--no-simulate" in args
     assert args.index("--progress") > args.index("--print")
     assert args[-1] == item.url
+
+
+@pytest.mark.parametrize("mode", [DownloadMode.VIDEO, DownloadMode.AUDIO])
+def test_section_download_uses_range_and_distinct_filename(mode: DownloadMode) -> None:
+    args = build_download_args(options(mode=mode, section_start=90, section_end=125.5))
+    assert argument_after(args, "--download-sections") == "*90-125.5"
+    assert argument_after(args, "-o") == "%(title)s [clip 90-125.5].%(ext)s"
+    assert "--force-keyframes-at-cuts" not in args
+
+
+def test_open_ended_section_and_precise_video_cuts() -> None:
+    args = build_download_args(options(section_start=3600, precise_cuts=True))
+    assert argument_after(args, "--download-sections") == "*3600-inf"
+    assert "--force-keyframes-at-cuts" in args
+
+
+def test_end_only_section_starts_at_zero() -> None:
+    args = build_download_args(options(section_end=60))
+    assert argument_after(args, "--download-sections") == "*0-60"
+
+
+def test_full_download_ignores_precise_cuts_and_keeps_filename() -> None:
+    args = build_download_args(options(precise_cuts=True))
+    assert "--download-sections" not in args
+    assert "--force-keyframes-at-cuts" not in args
+    assert argument_after(args, "-o") == "%(title)s.%(ext)s"
+
+
+def test_precise_video_cuts_are_not_applied_to_audio() -> None:
+    args = build_download_args(options(mode=DownloadMode.AUDIO, section_start=0, section_end=30, precise_cuts=True))
+    assert "--force-keyframes-at-cuts" not in args

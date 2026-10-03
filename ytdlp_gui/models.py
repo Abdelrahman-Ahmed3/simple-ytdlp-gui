@@ -36,6 +36,9 @@ class DownloadOptions:
     audio_format: str = "Best"
     audio_bitrate: str = "Best/default"
     ffmpeg_path: str = ""
+    section_start: float | None = None
+    section_end: float | None = None
+    precise_cuts: bool = False
 
 
 @dataclass(frozen=True)

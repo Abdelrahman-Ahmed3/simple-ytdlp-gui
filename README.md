@@ -5,6 +5,7 @@ A compact desktop GUI frontend for [yt-dlp](https://github.com/yt-dlp/yt-dlp). I
 ## Features
 
 - Video or audio-only downloads from any URL supported by yt-dlp
+- Download a section using start/end timestamps, with optional precise video cuts
 - Exact video quality selection, with an explicit optional lower-resolution fallback
 - Source stream preferences for H.264/AVC, VP9, and AV1 without automatic video transcoding
 - MP4, MKV, WebM, or automatic output container selection
@@ -37,6 +38,10 @@ python -m ytdlp_gui
 
 Paste a URL, use **Check formats** to inspect streams, select the desired settings, choose an output folder, and click **Download**.
 
+For clips, enable **Download only a section** and enter a start and/or end time. Accepted formats are seconds (`90`), `MM:SS` (`1:30`), and `HH:MM:SS` (`01:02:30`), with up to three decimal places for seconds. A blank start means the beginning; a blank end means the end of the video. The end must be later than the start. Sections work in both video and audio-only modes and require FFmpeg, which the app can install when needed.
+
+Clips include their range in the filename, so different sections and full downloads stay separate. The section choice and timestamps are remembered. **Precise video cuts** re-encodes video for cleaner cut boundaries and is slower; otherwise cuts may align with nearby keyframes. Section downloads use yt-dlp's [download-sections support](https://github.com/yt-dlp/yt-dlp#download-options); transfer efficiency depends on the site's stream and seeking support.
+
 ## Tests
 
 ```powershell
@@ -54,7 +59,7 @@ Install development requirements, then run from the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-The single-file application will be created as `dist\yt-dlp-gui-v0.1.6.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
+The single-file application will be created as `dist\yt-dlp-gui-v0.1.7.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
 
 ## Selection behavior
 

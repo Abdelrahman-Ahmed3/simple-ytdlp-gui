@@ -54,6 +54,12 @@ def _video_selector(options: DownloadOptions) -> str:
 
 
 def build_download_args(options: DownloadOptions) -> list[str]:
+    section = options.section_start is not None or options.section_end is not None
+    output_template = "%(title)s.%(ext)s"
+    if section:
+        start = format(options.section_start or 0, ".3f").rstrip("0").rstrip(".") or "0"
+        end = format(options.section_end, ".3f").rstrip("0").rstrip(".") if options.section_end is not None else "inf"
+        output_template = f"%(title)s [clip {start}-{end}].%(ext)s"
     args = [
         "--no-playlist",
         "--newline",
@@ -69,8 +75,13 @@ def build_download_args(options: DownloadOptions) -> list[str]:
         "-P",
         str(options.output_dir),
         "-o",
-        "%(title)s.%(ext)s",
+        output_template,
     ]
+
+    if section:
+        args += ["--download-sections", f"*{start}-{end}"]
+        if options.precise_cuts and options.mode is DownloadMode.VIDEO:
+            args.append("--force-keyframes-at-cuts")
 
     ffmpeg_location = ffmpeg_location_arg(options.ffmpeg_path)
     if ffmpeg_location:

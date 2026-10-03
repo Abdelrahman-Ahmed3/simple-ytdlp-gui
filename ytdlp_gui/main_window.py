@@ -35,7 +35,7 @@ from .process_runner import ProcessRunner
 from .progress import format_eta, human_bytes
 from .settings import AppSettings
 from .tool_manager import ToolManager
-from .validation import validate_output_folder, validate_url
+from .validation import parse_section, validate_output_folder, validate_url
 
 
 QUALITIES = ("Best", "2160p", "1440p", "1080p", "720p", "480p", "360p")
@@ -127,6 +127,30 @@ class MainWindow(QMainWindow):
         audio_form.addRow("Conversion bitrate:", self.audio_bitrate_combo)
         self.audio_widget.hide()
         options_layout.addWidget(self.audio_widget)
+
+        self.section_check = QCheckBox("Download only a section")
+        options_layout.addWidget(self.section_check)
+        self.section_widget = QWidget()
+        section_layout = QVBoxLayout(self.section_widget)
+        section_layout.setContentsMargins(0, 0, 0, 0)
+        range_row = QHBoxLayout()
+        self.start_edit = QLineEdit()
+        self.start_edit.setPlaceholderText("Beginning (0:00)")
+        self.end_edit = QLineEdit()
+        self.end_edit.setPlaceholderText("End of video")
+        range_row.addWidget(QLabel("Start:"))
+        range_row.addWidget(self.start_edit)
+        range_row.addWidget(QLabel("End:"))
+        range_row.addWidget(self.end_edit)
+        section_layout.addLayout(range_row)
+        section_help = QLabel("Use seconds, MM:SS, or HH:MM:SS. Leave one time blank to use the beginning or end.")
+        section_help.setWordWrap(True)
+        section_layout.addWidget(section_help)
+        self.precise_cuts_check = QCheckBox("Precise video cuts (slower; re-encodes video)")
+        self.precise_cuts_check.setToolTip("Without this option, video cuts may align with nearby keyframes.")
+        section_layout.addWidget(self.precise_cuts_check)
+        self.section_widget.setEnabled(False)
+        options_layout.addWidget(self.section_widget)
         root.addWidget(self.options_frame)
 
         self.availability_label = QLabel("Use Check formats to inspect available streams before downloading.")
@@ -195,6 +219,7 @@ class MainWindow(QMainWindow):
         self.codec_combo.currentTextChanged.connect(self._selection_changed)
         self.fallback_check.toggled.connect(self._selection_changed)
         self.audio_format_combo.currentTextChanged.connect(self._update_bitrate_enabled)
+        self.section_check.toggled.connect(self.section_widget.setEnabled)
         self.settings_action.triggered.connect(self._show_settings)
         self.logs_action.triggered.connect(self.log_dialog.show)
         self.update_action.triggered.connect(self._update_ytdlp)
@@ -230,6 +255,11 @@ class MainWindow(QMainWindow):
         self._set_combo(self.audio_format_combo, self.settings.get("download/audio_format", "M4A"))
         self._set_combo(self.audio_bitrate_combo, self.settings.get("download/audio_bitrate", "Best/default"))
         self.fallback_check.setChecked(self.settings.get_bool("download/fallback_lower", False))
+        self.section_check.setChecked(self.settings.get_bool("download/section", False))
+        self.section_widget.setEnabled(self.section_check.isChecked())
+        self.start_edit.setText(self.settings.get("download/section_start"))
+        self.end_edit.setText(self.settings.get("download/section_end"))
+        self.precise_cuts_check.setChecked(self.settings.get_bool("download/precise_cuts", False))
 
     @staticmethod
     def _set_combo(combo: QComboBox, value: str) -> None:
@@ -245,6 +275,10 @@ class MainWindow(QMainWindow):
         self.settings.set("download/audio_format", self.audio_format_combo.currentText())
         self.settings.set("download/audio_bitrate", self.audio_bitrate_combo.currentText())
         self.settings.set("download/fallback_lower", self.fallback_check.isChecked())
+        self.settings.set("download/section", self.section_check.isChecked())
+        self.settings.set("download/section_start", self.start_edit.text().strip())
+        self.settings.set("download/section_end", self.end_edit.text().strip())
+        self.settings.set("download/precise_cuts", self.precise_cuts_check.isChecked())
         self.settings.sync()
 
     def _refresh_dependencies(self) -> None:
@@ -339,6 +373,7 @@ class MainWindow(QMainWindow):
         self.availability_label.setStyleSheet("" if supported else "color: #a35a00")
 
     def _mode_changed(self, video: bool) -> None:
+        self.precise_cuts_check.setVisible(video)
         self.video_widget.setVisible(video)
         self.audio_widget.setVisible(not video)
         if video:
@@ -357,6 +392,7 @@ class MainWindow(QMainWindow):
             self.output_edit.setText(folder)
 
     def _options(self) -> DownloadOptions:
+        start, end = parse_section(self.start_edit.text(), self.end_edit.text()) if self.section_check.isChecked() else (None, None)
         return DownloadOptions(
             url=self.url_edit.text().strip(),
             output_dir=Path(self.output_edit.text().strip()).expanduser(),
@@ -368,9 +404,14 @@ class MainWindow(QMainWindow):
             audio_format=self.audio_format_combo.currentText(),
             audio_bitrate=self.audio_bitrate_combo.currentText(),
             ffmpeg_path=self.ffmpeg_path,
+            section_start=start,
+            section_end=end,
+            precise_cuts=self.precise_cuts_check.isChecked(),
         )
 
     def _requires_ffmpeg(self, options: DownloadOptions) -> bool:
+        if options.section_start is not None or options.section_end is not None:
+            return True
         if options.mode is DownloadMode.VIDEO:
             return True
         return options.audio_format != "Best"
@@ -380,10 +421,14 @@ class MainWindow(QMainWindow):
         if error:
             self._warn(error)
             return
+        try:
+            options = self._options()
+        except ValueError as exc:
+            self._warn(str(exc))
+            return
         if not self.ytdlp_path:
             self._missing_ytdlp("download")
             return
-        options = self._options()
         if options.mode is DownloadMode.VIDEO and options.container is Container.WEBM and options.codec is VideoCodec.H264:
             self._warn("H.264 video is not compatible with the WebM container. Choose Auto, MKV, or MP4, or select a WebM-compatible codec.")
             return
