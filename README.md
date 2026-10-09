@@ -59,7 +59,15 @@ Install development requirements, then run from the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-The single-file application will be created as `dist\yt-dlp-gui-v0.1.7.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
+The single-file application will be created as `dist\yt-dlp-gui-v0.1.8.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
+
+The build isolates the DLL search path to Python and Windows directories, preventing unrelated tools from contributing incompatible Qt/ICU libraries. Before reporting success, it launches the packaged executable with only Windows directories on PATH and requires it to display its main window, parse a section through the GUI controls, report readiness, and exit successfully. Build diagnostics are retained under `build/`.
+
+To repeat the packaged startup check:
+
+```powershell
+python scripts\verify_packaged.py dist\yt-dlp-gui-v0.1.8.exe
+```
 
 ## Selection behavior
 
