@@ -4,6 +4,7 @@ from PySide6.QtCore import QObject, QProcess, QTimer, Signal
 
 from .command_builder import build_metadata_args
 from .formats import FormatSummary, parse_metadata
+from .external_process import prepare_external_process
 
 
 class FormatInspector(QObject):
@@ -47,6 +48,7 @@ class FormatInspector(QObject):
         self._timed_out = False
         self._failure_emitted = False
         self.started.emit()
+        prepare_external_process(self.process)
         self.process.start(program, build_metadata_args(url))
         self._timeout.start()
 

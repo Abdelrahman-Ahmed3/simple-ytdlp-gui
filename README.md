@@ -13,6 +13,7 @@ A compact desktop GUI frontend for [yt-dlp](https://github.com/yt-dlp/yt-dlp). I
 - Asynchronous format inspection and downloads, progress, speed, size, ETA, and cancellation
 - Clear error messages with copyable technical details and a separate debug log
 - Automatic yt-dlp and FFmpeg discovery, first-use installation, configurable executable paths, and yt-dlp update controls
+- Automatic yt-dlp update on startup, with cancellation and an offline fallback to the existing version
 - Persistent choices and output folder through Qt settings
 
 V1 intentionally handles one URL at a time and does not include playlists, queues, cookies, subtitles, account management, or DRM/access-control bypass features.
@@ -24,6 +25,10 @@ V1 intentionally handles one URL at a time and does not include playlists, queue
 - An internet connection the first time the application installs yt-dlp or FFmpeg
 
 The packaged GUI can start with neither yt-dlp nor FFmpeg installed. When an operation first needs a missing tool, the application offers to download it into its private local-application-data tools folder and automatically resumes the original action afterward. Existing configured or system `PATH` installations are still detected.
+
+When yt-dlp is available, startup checks for updates before enabling format checks and downloads. Updates run against a private app-owned copy, so system/WinGet installations remain untouched and administrator rights are unnecessary. A successful update automatically selects that copy for subsequent downloads. You can cancel the check; network failures and timeouts leave the existing executable available and are recorded in the debug log without a startup error popup. **Tools → Check for yt-dlp updates** retries manually. The GUI executable itself is not updated by this check.
+
+External tools receive a separate environment that excludes inherited Python/Qt settings and SSL key-log paths. Frozen Windows builds also clear the GUI's inherited DLL search directory before launching yt-dlp or FFmpeg.
 
 yt-dlp is downloaded from its official GitHub release. FFmpeg itself publishes source code and links Windows users to compiled build providers; this app uses the gyan.dev release essentials build and its GitHub mirror. The FFmpeg archive's published SHA-256 checksum is verified, only `ffmpeg.exe` and `ffprobe.exe` are extracted, and the archive is deleted afterward. The essentials build is GPLv3-licensed. See [FFmpeg's download page](https://ffmpeg.org/download.html) and [gyan.dev's Windows builds](https://www.gyan.dev/ffmpeg/builds/).
 
@@ -59,14 +64,14 @@ Install development requirements, then run from the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-The single-file application will be created as `dist\yt-dlp-gui-v0.1.8.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
+The single-file application will be created as `dist\yt-dlp-gui-v0.1.7.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
 
 The build isolates the DLL search path to Python and Windows directories, preventing unrelated tools from contributing incompatible Qt/ICU libraries. Before reporting success, it launches the packaged executable with only Windows directories on PATH and requires it to display its main window, parse a section through the GUI controls, report readiness, and exit successfully. Build diagnostics are retained under `build/`.
 
 To repeat the packaged startup check:
 
 ```powershell
-python scripts\verify_packaged.py dist\yt-dlp-gui-v0.1.8.exe
+python scripts\verify_packaged.py dist\yt-dlp-gui-v0.1.7.exe
 ```
 
 ## Selection behavior

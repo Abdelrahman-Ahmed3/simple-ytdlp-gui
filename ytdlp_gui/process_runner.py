@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, QProcess, QTimer, Signal
 
 from .command_builder import display_command
 from .errors import is_http_403
+from .external_process import prepare_external_process
 from .models import ProgressUpdate
 from .progress import parse_output_path, parse_progress_line
 
@@ -55,6 +56,7 @@ class ProcessRunner(QObject):
     def _launch(self, program: str, args: list[str]) -> None:
         command = display_command(program, args)
         self.started.emit(command)
+        prepare_external_process(self.process)
         self.process.start(program, args)
 
     def cancel(self) -> None:

@@ -9,6 +9,7 @@ def is_http_403(output: str) -> bool:
 def friendly_error(output: str, exit_code: int) -> str:
     text = output.lower()
     checks = (
+        (("virtual_file.log", "sslkeylogfile"), "A logging path inherited from the launcher is inaccessible. Restart the app with the updated build, which isolates download tools from launcher settings."),
         (
             ("http error 403", "403: forbidden"),
             "The site rejected the media request. Update yt-dlp, then try again; "
@@ -20,7 +21,7 @@ def friendly_error(output: str, exit_code: int) -> str:
         (("video unavailable", "this video is unavailable", "private video"), "The video is unavailable or private."),
         (("sign in to confirm", "cookies", "login required", "authentication"), "This site requires authentication or browser cookies. V1 does not include cookie importing."),
         (("unable to download webpage", "network is unreachable", "connection refused", "timed out", "temporary failure"), "A network error prevented yt-dlp from reaching the site."),
-        (("update to a nightly", "please update", "yt-dlp is out of date"), "yt-dlp may be outdated. Use Tools → Check for yt-dlp updates, then try again."),
+        (("update to a nightly", "please update", "yt-dlp is out of date", "older than 90 days"), "yt-dlp may be outdated. Use Tools → Check for yt-dlp updates, then try again."),
     )
     for needles, message in checks:
         if any(needle in text for needle in needles):

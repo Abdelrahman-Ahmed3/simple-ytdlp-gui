@@ -15,17 +15,20 @@ import subprocess
 import tempfile
 
 
-def verify(executable: Path, timeout: int = 45) -> dict:
+def verify(executable: Path, timeout: int = 45, update_ytdlp: Path | None = None) -> dict:
     executable = executable.resolve(strict=True)
     environment = os.environ.copy()
     windows = Path(environment.get("SystemRoot", "C:/Windows"))
     environment["PATH"] = os.pathsep.join((str(windows / "System32"), str(windows)))
     for key in ("QT_PLUGIN_PATH", "QML2_IMPORT_PATH", "QT_QPA_PLATFORM", "PYTHONPATH", "PYTHONHOME"):
         environment.pop(key, None)
+    if update_ytdlp:
+        environment["YTDLP_GUI_VERIFY_YTDLP"] = str(update_ytdlp.resolve(strict=True))
     # A fresh working directory also checks that no neighboring DLL is needed.
     with tempfile.TemporaryDirectory(prefix="ytdlp-gui-smoke-") as directory:
         report_path = Path(directory) / "ready.json"
-        process = subprocess.Popen([str(executable), "--smoke-test", str(report_path)],
+        flag = "--smoke-test-update" if update_ytdlp else "--smoke-test"
+        process = subprocess.Popen([str(executable), flag, str(report_path)],
             cwd=directory, env=environment)
         try:
             code = process.wait(timeout=timeout)
@@ -39,6 +42,8 @@ def verify(executable: Path, timeout: int = 45) -> dict:
         report = json.loads(report_path.read_text(encoding="utf-8"))
         if report.get("status") != "ok" or report.get("platform") != "windows" or report.get("section") != [90, 120]:
             raise RuntimeError(f"Packaged app did not pass the Windows UI check: {report}")
+        if update_ytdlp and report.get("startup_update") is not True:
+            raise RuntimeError("Packaged app did not complete its startup update")
     report["sha256"] = hashlib.sha256(executable.read_bytes()).hexdigest()
     return report
 
@@ -47,8 +52,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("--timeout", type=int, default=45)
+    parser.add_argument("--update-ytdlp", type=Path, help="Also run the real startup updater using this initial executable")
     arguments = parser.parse_args()
     try:
-        print(json.dumps(verify(arguments.executable, arguments.timeout), indent=2))
+        print(json.dumps(verify(arguments.executable, arguments.timeout, arguments.update_ytdlp), indent=2))
     except (RuntimeError, OSError) as exc:
         parser.exit(1, f"Startup verification FAILED: {exc}\n")

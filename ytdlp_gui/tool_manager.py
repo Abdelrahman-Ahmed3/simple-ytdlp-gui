@@ -9,10 +9,11 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from PySide6.QtCore import QFileDevice, QObject, QProcess, QSaveFile, QThread, QUrl, Signal, Slot
+from PySide6.QtCore import QFileDevice, QObject, QProcess, QSaveFile, QThread, QTimer, QUrl, Signal, Slot
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 from .dependencies import ffmpeg_archive_target, ffmpeg_install_dir, ytdlp_download_target
+from .external_process import prepare_external_process
 
 
 YTDLP_RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
@@ -117,15 +118,23 @@ class ToolManager(QObject):
         self._update_process.setProcessChannelMode(QProcess.MergedChannels)
         self._update_process.readyReadStandardOutput.connect(self._update_output)
         self._update_process.finished.connect(self._update_done)
+        self._update_process.errorOccurred.connect(self._update_error)
         self._update_log: list[str] = []
+        self._updating = False
+        self._update_timed_out = False
+        self.updated_ytdlp_path = ""
+        self._update_timer = QTimer(self)
+        self._update_timer.setSingleShot(True)
+        self._update_timer.setInterval(120_000)
+        self._update_timer.timeout.connect(self._update_timeout)
 
     @property
     def busy(self) -> bool:
-        return self._reply is not None or self._extract_thread is not None
+        return self._reply is not None or self._extract_thread is not None or self._updating
 
     @property
     def can_cancel(self) -> bool:
-        return self._reply is not None
+        return self._reply is not None or self._updating
 
     def install_ytdlp(self) -> None:
         if self.busy:
@@ -304,24 +313,78 @@ class ToolManager(QObject):
         self.ffmpeg_install_finished.emit(success, message)
 
     def cancel_install(self) -> None:
+        if self._updating:
+            self._cancelled = True
+            self._update_process.kill()
+            return
         if self._reply is None:
             return
         self._cancelled = True
         self._reply.abort()
 
     def update_ytdlp(self, executable: str) -> None:
-        if self._update_process.state() != QProcess.NotRunning:
+        if self.busy:
             return
+        self._updating = True
+        self._cancelled = False
+        self._update_timed_out = False
+        self.updated_ytdlp_path = ""
         self._update_log.clear()
+        try:
+            target = ytdlp_download_target()
+            if Path(executable).resolve() != target.resolve():
+                # Never attempt to overwrite a WinGet / Program Files install.
+                file = QSaveFile(str(target))
+                if not file.open(QFileDevice.WriteOnly):
+                    raise OSError(file.errorString())
+                with Path(executable).open("rb") as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        if file.write(chunk) != len(chunk):
+                            file.cancelWriting()
+                            raise OSError(file.errorString())
+                if not file.commit():
+                    raise OSError(file.errorString())
+                if os.name != "nt":
+                    target.chmod(0o755)
+            self.updated_ytdlp_path = str(target)
+            prepare_external_process(self._update_process)
+        except OSError as exc:
+            self._finish_update(False, f"Could not prepare the app's yt-dlp copy: {exc}")
+            return
         self.message.emit("Checking for yt-dlp updates…")
-        self._update_process.start(executable, ["-U"])
+        self._update_process.start(str(target), ["--ignore-config", "--socket-timeout", "15", "-U"])
+        self._update_timer.start()
 
     def _update_output(self) -> None:
         text = bytes(self._update_process.readAllStandardOutput()).decode("utf-8", errors="replace")
         self._update_log.append(text)
-        self.message.emit(text.strip())
+        if "Updating to " in text:
+            self.message.emit("Installing the yt-dlp update…")
 
     def _update_done(self, exit_code: int, _status: QProcess.ExitStatus) -> None:
+        if not self._updating:
+            return
         self._update_output()
         details = "".join(self._update_log).strip()
-        self.update_finished.emit(exit_code == 0, details or f"yt-dlp exited with code {exit_code}")
+        if self._cancelled:
+            self._finish_update(False, "yt-dlp update cancelled. The previous version is still available.")
+        elif self._update_timed_out:
+            self._finish_update(False, "yt-dlp update timed out. Check your connection or try Tools → Check for yt-dlp updates.")
+        else:
+            self._finish_update(exit_code == 0, details or f"yt-dlp exited with code {exit_code}")
+
+    def _update_error(self, error: QProcess.ProcessError) -> None:
+        if error == QProcess.FailedToStart:
+            self._finish_update(False, f"Could not start the yt-dlp updater: {self._update_process.errorString()}")
+
+    def _update_timeout(self) -> None:
+        if self._updating:
+            self._update_timed_out = True
+            self._update_process.kill()
+
+    def _finish_update(self, success: bool, details: str) -> None:
+        if not self._updating:
+            return
+        self._update_timer.stop()
+        self._updating = False
+        self.update_finished.emit(success, details)

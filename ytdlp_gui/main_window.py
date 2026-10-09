@@ -57,6 +57,7 @@ class MainWindow(QMainWindow):
         self._close_after_cancel = False
         self._pending_action = ""
         self._tool_installing = ""
+        self._automatic_ytdlp_update = False
         self._activity_context = ""
         self._activity_phase = ""
         self._activity_elapsed = QElapsedTimer()
@@ -295,10 +296,12 @@ class MainWindow(QMainWindow):
         self._maybe_inspect()
 
     def _maybe_inspect(self) -> None:
-        if validate_url(self.url_edit.text()) is None and self.ytdlp_path and not self.runner.running:
+        if validate_url(self.url_edit.text()) is None and self.ytdlp_path and not self.runner.running and not self.tools.busy:
             self._inspect_formats()
 
     def _inspect_formats(self) -> None:
+        if self.tools.busy:
+            return
         if self.inspector.running:
             self.inspector.cancel()
             return
@@ -417,6 +420,8 @@ class MainWindow(QMainWindow):
         return options.audio_format != "Best"
 
     def _start_download(self) -> None:
+        if self.tools.busy or self.runner.running:
+            return
         error = validate_url(self.url_edit.text()) or validate_output_folder(self.output_edit.text())
         if error:
             self._warn(error)
@@ -453,6 +458,7 @@ class MainWindow(QMainWindow):
         self.runner.start(self.ytdlp_path, build_download_args(options))
 
     def _set_running(self, running: bool) -> None:
+        self._set_tool_actions_enabled(not running)
         self.download_button.setEnabled(not running)
         self.cancel_button.setEnabled(running)
         self.inspect_button.setEnabled(not running and not self.inspector.running)
@@ -624,6 +630,7 @@ class MainWindow(QMainWindow):
         self.tools.install_ffmpeg()
 
     def _begin_tool_install(self, tool: str) -> None:
+        self._set_tool_actions_enabled(False)
         self._tool_installing = tool
         self.download_button.setEnabled(False)
         self.inspect_button.setEnabled(False)
@@ -672,7 +679,14 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("%p%")
         self.eta_label.setText("ETA: —")
+        self._set_tool_actions_enabled(True)
         return pending
+
+    def _set_tool_actions_enabled(self, enabled: bool) -> None:
+        self.settings_action.setEnabled(enabled)
+        self.install_action.setEnabled(enabled)
+        self.install_ffmpeg_action.setEnabled(enabled)
+        self.update_action.setEnabled(enabled and bool(self.ytdlp_path))
 
     def _resume_action(self, action: str) -> None:
         if action == "download":
@@ -710,15 +724,33 @@ class MainWindow(QMainWindow):
         else:
             ErrorDialog("FFmpeg could not be installed.", message, self).exec()
 
-    def _update_ytdlp(self) -> None:
-        if self.ytdlp_path:
-            self.tools.update_ytdlp(self.ytdlp_path)
+    def _update_ytdlp(self, automatic: bool = False) -> None:
+        if not self.ytdlp_path or self.tools.busy or self.runner.running or self.inspector.running:
+            return
+        self._automatic_ytdlp_update = automatic
+        self._begin_tool_install("yt-dlp update")
+        self.status_label.setText("Checking for yt-dlp updates…")
+        self.details_label.setText("Updating the app's private copy before downloads start. You can cancel to use the existing version.")
+        self.tools.update_ytdlp(self.ytdlp_path)
 
     def _update_finished(self, success: bool, details: str) -> None:
+        automatic = self._automatic_ytdlp_update
+        self._automatic_ytdlp_update = False
+        self._finish_tool_install()
+        self._log(f"yt-dlp update: {details}")
         if success:
-            information(self, "yt-dlp update", details)
+            self.settings.set("tools/ytdlp", self.tools.updated_ytdlp_path)
+            self.settings.sync()
+            self._refresh_dependencies()
+            self.status_label.setText("Ready — yt-dlp is up to date")
+            self.details_label.setText("")
+            if not automatic:
+                information(self, "yt-dlp update", details)
         else:
-            ErrorDialog("yt-dlp could not be updated.", details, self).exec()
+            self.status_label.setText("Update unavailable — using the existing yt-dlp")
+            self.details_label.setText("Try Tools → Check for yt-dlp updates when your connection is available.")
+            if not automatic:
+                ErrorDialog("yt-dlp could not be updated. The previous version is still available.", details, self).exec()
 
     def _log(self, text: str) -> None:
         self.log_dialog.append(text)
@@ -730,8 +762,8 @@ class MainWindow(QMainWindow):
         if self.tools.busy:
             QMessageBox.information(
                 self,
-                "Tool installation in progress",
-                "Please wait for the tool installation to finish, or cancel the download before closing.",
+                "Tool operation in progress",
+                "Please wait for the tool operation to finish, or cancel it before closing.",
             )
             event.ignore()
             return
