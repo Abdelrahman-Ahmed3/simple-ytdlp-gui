@@ -107,8 +107,10 @@ class MainWindow(QMainWindow):
         video_form = QFormLayout(self.video_widget)
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(QUALITIES)
+        self.quality_combo.setToolTip("Best allows another source codec and a compatible container when needed.")
         self.codec_combo = QComboBox()
         self.codec_combo.addItems([item.value for item in VideoCodec])
+        self.codec_combo.setToolTip("Best treats the source codec as a preference. A specific resolution requires the selected codec.")
         self.container_combo = QComboBox()
         self.container_combo.addItems([item.value for item in Container])
         self.fallback_check = QCheckBox("Allow closest lower resolution")
@@ -434,7 +436,8 @@ class MainWindow(QMainWindow):
         if not self.ytdlp_path:
             self._missing_ytdlp("download")
             return
-        if options.mode is DownloadMode.VIDEO and options.container is Container.WEBM and options.codec is VideoCodec.H264:
+        if (options.mode is DownloadMode.VIDEO and options.quality != "Best"
+                and options.container is Container.WEBM and options.codec is VideoCodec.H264):
             self._warn("H.264 video is not compatible with the WebM container. Choose Auto, MKV, or MP4, or select a WebM-compatible codec.")
             return
         if self._requires_ffmpeg(options) and not self.ffmpeg_path:
@@ -573,6 +576,7 @@ class MainWindow(QMainWindow):
         self._end_activity("download")
         self._set_running(False)
         self.status_label.setText("Failed")
+        self.details_label.clear()
         self.eta_label.setText("ETA: —")
         message = friendly_error(details, exit_code)
         ErrorDialog(message, details, self).exec()

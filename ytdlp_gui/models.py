@@ -17,6 +17,13 @@ class VideoCodec(str, Enum):
     AV1 = "AV1"
 
 
+VIDEO_CODEC_PREFIXES = {
+    VideoCodec.H264: ("avc1",),
+    VideoCodec.VP9: ("vp9", "vp09"),
+    VideoCodec.AV1: ("av01",),
+}
+
+
 class Container(str, Enum):
     AUTO = "Auto"
     MP4 = "MP4"

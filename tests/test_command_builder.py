@@ -46,7 +46,21 @@ def test_auto_mp4_prefers_h264_and_aac_without_forcing_them() -> None:
 def test_video_selector_has_same_quality_combined_stream_fallback() -> None:
     args = build_download_args(options(container=Container.AUTO, codec=VideoCodec.VP9))
     selector = argument_after(args, "-f")
-    assert selector == "bestvideo[height=1080][vcodec^=vp9]+bestaudio/best[height=1080][vcodec^=vp9]"
+    codec_filter = "[vcodec~='^(?:vp9|vp09)']"
+    assert selector == f"bestvideo[height=1080]{codec_filter}+bestaudio/best[height=1080]{codec_filter}"
+
+
+def test_best_falls_back_to_other_codecs_and_silent_video() -> None:
+    args = build_download_args(options(quality="Best", codec=VideoCodec.VP9, container=Container.WEBM))
+    assert argument_after(args, "-f").split("/") == [
+        "bestvideo*[vcodec~='^(?:vp9|vp09)']+bestaudio",
+        "best[vcodec~='^(?:vp9|vp09)']",
+        "bestvideo*+bestaudio",
+        "best",
+        "bestvideo*[vcodec~='^(?:vp9|vp09)']",
+        "bestvideo*",
+    ]
+    assert argument_after(args, "--merge-output-format") == "webm/mkv"
 
 
 def test_best_audio_does_not_add_conversion() -> None:

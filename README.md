@@ -64,22 +64,22 @@ Install development requirements, then run from the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 
-The single-file application will be created as `dist\yt-dlp-gui-v0.1.7.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
+The single-file application will be created as `dist\yt-dlp-gui-v0.1.10.exe`. yt-dlp and FFmpeg are deliberately not frozen into the executable; the application installs current copies into its private tools folder when required. This keeps the shared GUI executable small enough to distribute and avoids permanently embedding outdated tool versions.
 
 The build isolates the DLL search path to Python and Windows directories, preventing unrelated tools from contributing incompatible Qt/ICU libraries. Before reporting success, it launches the packaged executable with only Windows directories on PATH and requires it to display its main window, parse a section through the GUI controls, report readiness, and exit successfully. Build diagnostics are retained under `build/`.
 
 To repeat the packaged startup check:
 
 ```powershell
-python scripts\verify_packaged.py dist\yt-dlp-gui-v0.1.7.exe
+python scripts\verify_packaged.py dist\yt-dlp-gui-v0.1.10.exe
 ```
 
 ## Selection behavior
 
 - A named quality such as 1080p uses an exact `height=1080` filter.
 - **Allow closest lower resolution** changes that to `height<=1080`; it is never enabled implicitly.
-- Codec preferences filter existing source streams (`avc1`, `vp9`, or `av01`). They do not cause video transcoding.
-- MP4 in Auto codec mode tries H.264 video plus AAC/M4A audio first, then other MP4-native streams, before a same-quality generic stream combination.
+- Video **Best** prefers the selected source codec and falls back to other codecs using the available source streams. It keeps a single stream's source container and can use MKV when the selected container is incompatible with streams that need merging.
+- A named quality with a selected codec filters source streams by that codec. For MP4 with Auto codec, it tries H.264 video plus AAC/M4A audio first, then other MP4-native streams, before a same-quality generic stream combination.
 - Audio **Best** keeps the best source audio without forcing extraction/conversion. Other audio formats use FFmpeg only as needed by yt-dlp's audio postprocessor.
 
 yt-dlp command output is available under **Tools → Debug log**. Commands are launched directly with program/argument arrays through `QProcess`; no shell command is constructed.

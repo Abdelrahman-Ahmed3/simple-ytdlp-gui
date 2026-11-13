@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from .models import VideoCodec
+from .models import VIDEO_CODEC_PREFIXES, VideoCodec
 
 
 @dataclass(frozen=True)
@@ -27,20 +27,17 @@ class FormatSummary:
             if fmt.get("vcodec") in (None, "none") or fmt.get("height") != height:
                 continue
             codec = str(fmt.get("vcodec", "")).lower()
-            if codec.startswith("avc1"):
-                result.add(VideoCodec.H264)
-            elif codec.startswith(("vp9", "vp09")):
-                result.add(VideoCodec.VP9)
-            elif codec.startswith("av01"):
-                result.add(VideoCodec.AV1)
+            result.update(item for item, prefixes in VIDEO_CODEC_PREFIXES.items() if codec.startswith(prefixes))
         return result
 
     def supports(self, quality: str, codec: VideoCodec, fallback_lower: bool = False) -> tuple[bool, str]:
         if quality == "Best":
             if codec is VideoCodec.AUTO:
                 return True, "Best available video"
-            available = any(codec in self.codecs_at(height) for height in self.video_heights)
-            return available, f"{codec.value} {'is available' if available else 'is not available'}"
+            prefixes = VIDEO_CODEC_PREFIXES[codec]
+            if any(str(fmt.get("vcodec")).lower().startswith(prefixes) for fmt in self.formats):
+                return True, f"Best available video (preferring {codec.value})"
+            return True, f"Best available video (any codec if {codec.value} is unavailable)"
 
         target = int(quality.removesuffix("p"))
         heights = [height for height in self.video_heights if height == target or fallback_lower and height <= target]

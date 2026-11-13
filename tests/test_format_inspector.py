@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -6,6 +7,7 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
 
 from ytdlp_gui.format_inspector import FormatInspector
+from ytdlp_gui.formats import FormatSummary
 from ytdlp_gui.models import ProgressUpdate
 
 
@@ -61,3 +63,32 @@ def test_progress_bar_and_explicit_eta_are_updated() -> None:
     assert window.eta_label.text() == "ETA: 00:06"
     window.close()
     assert app is not None
+
+
+def test_best_download_accepts_metadata_without_preferred_codec(monkeypatch, tmp_path: Path) -> None:
+    from ytdlp_gui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(MainWindow, "_restore_settings", lambda self: None)
+    monkeypatch.setattr(MainWindow, "_save_settings", lambda self: None)
+    window = MainWindow()
+    window.ytdlp_path = "yt-dlp"
+    window.ffmpeg_path = "ffmpeg"
+    window.output_edit.setText(str(tmp_path))
+    window.url_edit.setText("https://www.instagram.com/p/example/")
+    window.quality_combo.setCurrentText("Best")
+    window.codec_combo.setCurrentText("VP9")
+    window.container_combo.setCurrentText("WebM")
+    window._inspection_completed(FormatSummary("Test video", ({"vcodec": "avc1.640028", "height": 1080},)))
+    assert "any codec" in window.availability_label.text()
+    launches = []
+    warnings = []
+    monkeypatch.setattr(window.runner, "start", lambda program, args: launches.append((program, args)))
+    monkeypatch.setattr(window, "_warn", warnings.append)
+    try:
+        window.download_button.click()
+        assert len(launches) == 1
+        assert warnings == []
+    finally:
+        window.close()
+        app.processEvents()

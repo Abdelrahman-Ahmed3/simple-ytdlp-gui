@@ -1,30 +1,40 @@
 from __future__ import annotations
 
 from .dependencies import ffmpeg_location_arg
-from .models import Container, DownloadMode, DownloadOptions, VideoCodec
+from .models import VIDEO_CODEC_PREFIXES, Container, DownloadMode, DownloadOptions, VideoCodec
 
 
 PROGRESS_PREFIX = "__YTDLP_PROGRESS__"
 OUTPUT_PREFIX = "__YTDLP_OUTPUT__"
 
 _CODEC_FILTERS = {
-    VideoCodec.H264: "[vcodec^=avc1]",
-    VideoCodec.VP9: "[vcodec^=vp9]",
-    VideoCodec.AV1: "[vcodec^=av01]",
+    codec: f"[vcodec~='^(?:{'|'.join(prefixes)})']" if len(prefixes) > 1 else f"[vcodec^={prefixes[0]}]"
+    for codec, prefixes in VIDEO_CODEC_PREFIXES.items()
 }
 
 
 def _quality_filter(quality: str, fallback_lower: bool) -> str:
-    if quality == "Best":
-        return ""
     height = int(quality.removesuffix("p"))
     operator = "<=" if fallback_lower else "="
     return f"[height{operator}{height}]"
 
 
+def _best_video_selector(codec_filter: str) -> str:
+    # Prefer formats with sound before falling back to silent video.
+    with_audio = "bestvideo*+bestaudio/best"
+    if not codec_filter:
+        return f"{with_audio}/bestvideo*"
+    return (
+        f"bestvideo*{codec_filter}+bestaudio/best{codec_filter}/"
+        f"{with_audio}/bestvideo*{codec_filter}/bestvideo*"
+    )
+
+
 def _video_selector(options: DownloadOptions) -> str:
-    quality = _quality_filter(options.quality, options.fallback_lower)
     selected_codec = _CODEC_FILTERS.get(options.codec, "")
+    if options.quality == "Best":
+        return _best_video_selector(selected_codec)
+    quality = _quality_filter(options.quality, options.fallback_lower)
 
     def pair(video_extra: str = "", audio: str = "bestaudio") -> str:
         return f"bestvideo{quality}{selected_codec}{video_extra}+{audio}"
@@ -107,6 +117,8 @@ def build_download_args(options: DownloadOptions) -> list[str]:
             Container.WEBM: "webm",
         }.get(options.container)
         if merge_format:
+            if options.quality == "Best" and options.container in (Container.MP4, Container.WEBM):
+                merge_format += "/mkv"
             args += ["--merge-output-format", merge_format]
 
     args.append(options.url)
